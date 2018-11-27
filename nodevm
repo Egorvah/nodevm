@@ -1,0 +1,114 @@
+#!/bin/bash
+
+case "$1" in
+      install)
+          ;;
+      uninstall)
+          ;;
+      set-default)
+          ;;
+      node)
+          ;;
+      npm)
+          ;;
+      *)
+          echo "Invalid command"
+          ;;
+esac
+
+if [[ $1 = "install" ]]; then
+    # check run as sudo
+    if [ "$EUID" -ne 0 ]
+        then echo "Error: Please run as root"
+        exit 1
+    fi
+
+    if ! [ -x "$(command -v n)" ]; then
+        echo " - Install n \n"
+        eval "npm i -g n"
+        #echo 'Error: n is not installed.' >&2
+        #exit 1
+    fi
+    eval "mkdir -p /usr/local/nodevm"
+    
+    current_node_version=$(node -v | head -n 1 | cut -d "v" -f 2)
+    node_path=$(which node)
+    npm_path=$(which npm)
+
+    back_node_path="$node_path.back"
+    back_npm_path="$npm_path.back"
+
+    # move node and npm to backup
+    eval "mv $node_path $back_node_path"
+    eval "mv $npm_path $back_npm_path"
+
+    echo $current_node_version > "/usr/local/nodevm/node.version"
+    echo $back_node_path > "/usr/local/nodevm/node.path"
+    echo $back_npm_path > "/usr/local/nodevm/npm.path"
+
+    eval "wget https://raw.githubusercontent.com/Egorvah/nodevm/master/node.sh -O $node_path && chmod +x $node_path"
+    eval "wget https://raw.githubusercontent.com/Egorvah/nodevm/master/npm.sh -O $npm_path && chmod +x $npm_path"
+
+    echo "done."
+fi
+
+if [[ $1 = "uninstall" ]]; then
+    # check run as sudo
+    if [ "$EUID" -ne 0 ]
+        then echo "Error: Please run as root"
+        exit 1
+    fi
+
+    eval "rm -rf /usr/local/nodevm"
+
+    # move node and npm from backup
+
+    node_path=$(which node)
+    npm_path=$(which npm)
+
+    back_node_path="$node_path.back"
+    back_npm_path="$npm_path.back"
+
+    eval "rm $node_path"
+    eval "rm $npm_path"
+
+    # move node and npm to backup
+    eval "mv $back_node_path $node_path"
+    eval "mv $back_npm_path $npm_path"
+
+    echo "done."
+fi
+
+if [[ $1 = "set-default" ]]; then
+    # check run as sudo
+    if [ "$EUID" -ne 0 ]
+        then echo "Error: Please run as root"
+        exit 1
+    fi
+
+fi
+
+if [[ $1 = "node" ]] || [[ $1 = 'npm' ]] ; then
+    cmd=$(echo "${@:2}")
+
+    NODE_PATH=$(cat /usr/local/nodevm/node.path)
+    NPM_PATH=$(cat /usr/local/nodevm/npm.path)
+
+    # check required nodejs version in package.json
+    version="$($NODE_PATH -e 'fs.readFile(path.resolve(__dirname, "package.json"), "UTF-8", (error, data) => { if (error != null) { console.log("unknown"); } else { const jsonData = JSON.parse(data);  if (jsonData.engines != null && jsonData.engines.node != null) { console.log(jsonData.engines.node); } else { console.log("unknown"); } } })')"
+
+    if [[ $version != "unknown" ]]; then
+        #eval "n -d $version"
+        NODE_PATH=$(n which $version)
+        NPM_PATH="$(dirname $NODE_PATH)/npm"
+        # "n -d $version"
+        # "n use $version $commands"
+    fi
+
+    if [[ $1 = "node" ]]; then
+        eval "$NODE_PATH $cmd"
+    fi
+    if [[ $1 = "npm" ]]; then
+        eval "$NPM_PATH $cmd"
+    fi
+fi
